@@ -1,72 +1,92 @@
 #!/usr/bin/env python3
-# fold_geom.py — brute force folding through geometry.
-# 2D lattice HP. Sequence of H/P. Enumerate self-avoiding walks.
-#   python3 scans/fold_geom.py HPPHPH
-#   python3 scans/fold_geom.py HHPHHPHH --limit 200000
-
+"""2D lattice HP fold. Brute geometry, sequence only scores."""
 import sys
 
 DIRS = ((1, 0), (-1, 0), (0, 1), (0, -1))
 
 
-def contacts(seq, coords):
-    index = {c: i for i, c in enumerate(coords)}
-    n = 0
-    for i, (x, y) in enumerate(coords):
-        if seq[i] != "H":
-            continue
-        for dx, dy in DIRS:
-            j = index.get((x + dx, y + dy))
-            if j is not None and j > i + 1 and seq[j] == "H":
-                n += 1
-    return n
+class LatticeFolding:
+    def __init__(self, sequence):
+        self.sequence = sequence.upper()
+        self.n = len(self.sequence)
+        self.best_contacts = -1
+        self.best_path = []
+        self.seen = 0
+        self.limit = 0
 
+    def count_contacts(self, path):
+        index = {c: i for i, c in enumerate(path)}
+        n = 0
+        for i, (x, y) in enumerate(path):
+            if self.sequence[i] != "H":
+                continue
+            for dx, dy in DIRS:
+                j = index.get((x + dx, y + dy))
+                if j is not None and j > i + 1 and self.sequence[j] == "H":
+                    n += 1
+        return n
 
-def brute(seq, limit=0):
-    seq = seq.upper()
-    if any(c not in "HP" for c in seq):
-        raise SystemExit("sequence must be H/P only")
-    best_e, best, seen = -1, None, 0
+    def fold(self, limit=0):
+        self.limit = limit
+        self.seen = 0
+        self.best_contacts = -1
+        self.best_path = []
+        start = (0, 0)
+        self._search([start], {start})
+        return self.best_contacts, self.best_path
 
-    def walk(coords, occupied):
-        nonlocal best_e, best, seen
-        if limit and seen >= limit:
+    def _search(self, path, visited):
+        if self.limit and self.seen >= self.limit:
             return
-        if len(coords) == len(seq):
-            seen += 1
-            e = contacts(seq, coords)
-            if e > best_e:
-                best_e, best = e, list(coords)
+        if len(path) == self.n:
+            self.seen += 1
+            c = self.count_contacts(path)
+            if c > self.best_contacts:
+                self.best_contacts = c
+                self.best_path = list(path)
             return
-        x, y = coords[-1]
+        x, y = path[-1]
         for dx, dy in DIRS:
             nxt = (x + dx, y + dy)
-            if nxt in occupied:
+            if nxt in visited:
                 continue
-            occupied.add(nxt)
-            coords.append(nxt)
-            walk(coords, occupied)
-            coords.pop()
-            occupied.remove(nxt)
+            visited.add(nxt)
+            path.append(nxt)
+            self._search(path, visited)
+            path.pop()
+            visited.remove(nxt)
 
-    origin = (0, 0)
-    walk([origin], {origin})
-    return best_e, best, seen
+    def render_ascii(self, path):
+        if not path:
+            return "no fold"
+        xs = [p[0] for p in path]
+        ys = [p[1] for p in path]
+        grid = {}
+        for i, (x, y) in enumerate(path):
+            grid[(x, y)] = self.sequence[i]
+        lines = []
+        for y in range(max(ys), min(ys) - 1, -1):
+            row = [grid.get((x, y), ".") for x in range(min(xs), max(xs) + 1)]
+            lines.append("".join(row))
+        return "\n".join(lines)
 
-
-def draw(seq, coords):
-    xs = [c[0] for c in coords]
-    ys = [c[1] for c in coords]
-    grid = {}
-    for i, (x, y) in enumerate(coords):
-        grid[(x, y)] = seq[i]
-    lines = []
-    for y in range(max(ys), min(ys) - 1, -1):
-        row = []
-        for x in range(min(xs), max(xs) + 1):
-            row.append(grid.get((x, y), "."))
-        lines.append("".join(row))
-    return "\n".join(lines)
+    def contact_map(self, path):
+        n = len(path)
+        m = [[ "." for _ in range(n)] for _ in range(n)]
+        index = {c: i for i, c in enumerate(path)}
+        for i, (x, y) in enumerate(path):
+            m[i][i] = self.sequence[i]
+            if self.sequence[i] != "H":
+                continue
+            for dx, dy in DIRS:
+                j = index.get((x + dx, y + dy))
+                if j is not None and abs(i - j) > 1 and self.sequence[j] == "H":
+                    m[i][j] = "*"
+        hdr = "   " + "".join("%2d" % i for i in range(n))
+        rows = [hdr]
+        for i, row in enumerate(m):
+            rows.append("%2d " % i + "".join("%2s" % c for c in row))
+        return "\n".join(rows)
 
 
 def main():
@@ -74,14 +94,15 @@ def main():
     limit = 0
     if "--limit" in sys.argv:
         limit = int(sys.argv[sys.argv.index("--limit") + 1])
-    e, coords, seen = brute(seq, limit)
-    print("[*] seq", seq, "len", len(seq))
-    print("[*] walks scored", seen)
-    print("[*] best HH contacts", e)
-    if coords:
-        print("[*] coords", coords)
-        print(draw(seq, coords))
-    print("[*] geometry is the search space. sequence is the scoring rule.")
+    fold = LatticeFolding(seq)
+    contacts, path = fold.fold(limit=limit)
+    print("[*] seq", fold.sequence, "len", fold.n)
+    print("[*] walks scored", fold.seen, "limit", limit or "none")
+    print("[*] best HH contacts", contacts)
+    print("[+] fold")
+    print(fold.render_ascii(path))
+    print("[+] contact map (* = non-chain HH)")
+    print(fold.contact_map(path))
 
 
 if __name__ == "__main__":
