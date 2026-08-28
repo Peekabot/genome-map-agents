@@ -1,7 +1,7 @@
 # run.py — tap in Pythonista or `python3 run.py` in iSH
-# MODE = agent | dash | fold
+# MODE = agent | dash | fold | test
 
-MODE = "fold"
+MODE = "test"
 TARGET = "."
 AGENT = "sequence-map"
 TOPIC = "genomics-for-builders"
@@ -15,6 +15,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__)) if "__file__" in dir() else os.getcwd()
 sys.path.insert(0, os.path.join(HERE, "scripts"))
 sys.path.insert(0, os.path.join(HERE, "scans"))
+sys.path.insert(0, os.path.join(HERE, "tests"))
 os.chdir(HERE)
 
 if MODE == "dash":
@@ -25,6 +26,9 @@ elif MODE == "fold":
     from alpha_code import analyze_structure
     target = TARGET if os.path.isabs(TARGET) else os.path.join(HERE, TARGET)
     analyze_structure(target)
+elif MODE == "test":
+    from runner import run_all
+    run_all()
 else:
     from run_agent import find_gaps, force_cli, living_notes, sequence_map
     if AGENT == "sequence-map":
