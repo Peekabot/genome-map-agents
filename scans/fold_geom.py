@@ -5,6 +5,32 @@ import sys
 DIRS = ((1, 0), (-1, 0), (0, 1), (0, -1))
 
 
+def _rot(coords):
+    out = [list(coords)]
+    for _ in range(3):
+        out.append([(y, -x) for x, y in out[-1]])
+    return out
+
+
+def _flip(coords):
+    return [
+        list(coords),
+        [(-x, y) for x, y in coords],
+        [(x, -y) for x, y in coords],
+        [(-x, -y) for x, y in coords],
+    ]
+
+
+def canon(coords):
+    variants = []
+    for r in _rot(coords):
+        for f in _flip(r):
+            mx = min(x for x, _ in f)
+            my = min(y for _, y in f)
+            variants.append(tuple(sorted((x - mx, y - my) for x, y in f)))
+    return min(variants)
+
+
 class LatticeFolding:
     def __init__(self, sequence):
         self.sequence = sequence.upper()
@@ -13,6 +39,7 @@ class LatticeFolding:
         self.best_path = []
         self.seen = 0
         self.limit = 0
+        self._optima = []
 
     def count_contacts(self, path):
         index = {c: i for i, c in enumerate(path)}
@@ -26,21 +53,24 @@ class LatticeFolding:
                     n += 1
         return n
 
-    def fold(self, limit=0):
+    def fold(self, limit=0, collect=False):
         self.limit = limit
         self.seen = 0
         self.best_contacts = -1
         self.best_path = []
+        self._optima = []
         start = (0, 0)
-        self._search([start], {start})
+        self._search([start], {start}, collect)
         return self.best_contacts, self.best_path
 
-    def _search(self, path, visited):
+    def _search(self, path, visited, collect):
         if self.limit and self.seen >= self.limit:
             return
         if len(path) == self.n:
             self.seen += 1
             c = self.count_contacts(path)
+            if collect:
+                self._optima.append((c, list(path)))
             if c > self.best_contacts:
                 self.best_contacts = c
                 self.best_path = list(path)
@@ -52,9 +82,21 @@ class LatticeFolding:
                 continue
             visited.add(nxt)
             path.append(nxt)
-            self._search(path, visited)
+            self._search(path, visited, collect)
             path.pop()
             visited.remove(nxt)
+
+    def unique_best(self):
+        if not self._optima:
+            return {}, 0
+        best = max(e for e, _ in self._optima)
+        uniq = {}
+        raw = 0
+        for e, p in self._optima:
+            if e == best:
+                raw += 1
+                uniq.setdefault(canon(p), p)
+        return uniq, raw
 
     def render_ascii(self, path):
         if not path:
@@ -72,7 +114,7 @@ class LatticeFolding:
 
     def contact_map(self, path):
         n = len(path)
-        m = [[ "." for _ in range(n)] for _ in range(n)]
+        m = [["." for _ in range(n)] for _ in range(n)]
         index = {c: i for i, c in enumerate(path)}
         for i, (x, y) in enumerate(path):
             m[i][i] = self.sequence[i]
@@ -92,13 +134,20 @@ class LatticeFolding:
 def main():
     seq = sys.argv[1] if len(sys.argv) > 1 else "HPPHPH"
     limit = 0
+    collect = "--unique" in sys.argv
     if "--limit" in sys.argv:
         limit = int(sys.argv[sys.argv.index("--limit") + 1])
     fold = LatticeFolding(seq)
-    contacts, path = fold.fold(limit=limit)
+    contacts, path = fold.fold(limit=limit, collect=collect)
     print("[*] seq", fold.sequence, "len", fold.n)
     print("[*] walks scored", fold.seen, "limit", limit or "none")
     print("[*] best HH contacts", contacts)
+    if collect:
+        uniq, raw = fold.unique_best()
+        print("[*] raw paths at best", raw)
+        print("[*] unique shapes at best", len(uniq))
+        if uniq:
+            path = next(iter(uniq.values()))
     print("[+] fold")
     print(fold.render_ascii(path))
     print("[+] contact map (* = non-chain HH)")

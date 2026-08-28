@@ -1,7 +1,4 @@
 #!/usr/bin/env python3
-# tests/runner.py — smallest smoke. Pythonista tap, iSH CLI, Shortcuts URL.
-# Writes notes/last_test.json for Shortcuts to read back.
-
 import json
 import os
 import sys
@@ -51,6 +48,23 @@ def test_fold():
     }
 
 
+def test_geom():
+    from fold_geom import LatticeFolding
+    f = LatticeFolding("HPPHPH")
+    e, path = f.fold(collect=True)
+    uniq, raw = f.unique_best()
+    ok = e == 2 and f.seen == 284 and len(uniq) == 1 and raw == 8
+    return {
+        "name": "geom",
+        "ok": ok,
+        "walks": f.seen,
+        "best": e,
+        "raw_best": raw,
+        "unique_best": len(uniq),
+        "path_len": len(path),
+    }
+
+
 def test_map():
     from run_agent import sequence_map, load_notes
     sequence_map("genomics-for-builders")
@@ -68,6 +82,7 @@ def test_files():
     need = [
         "scans/alpha_code.py",
         "scans/gap_scanner.py",
+        "scans/fold_geom.py",
         "dashboard.py",
         "notes/expression.json",
     ]
@@ -77,7 +92,7 @@ def test_files():
 
 def run_all():
     results = []
-    for fn in (test_files, test_fold, test_map):
+    for fn in (test_files, test_fold, test_geom, test_map):
         try:
             results.append(fn())
         except Exception as e:
