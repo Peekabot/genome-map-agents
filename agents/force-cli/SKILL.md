@@ -1,32 +1,24 @@
 ---
 name: force-cli
-description: Heat-shock practice. Build a parser from scratch with BioPython or raw text. Pull data with ncbi-genome-download style CLI. No GUIs, no notebooks, no autocomplete-as-crutch. Use when memory pathways need stress.
+description: Heat-shock practice on iSH or Pythonista. Raw FASTA parser is the default. BioPython is optional and usually absent on the phone. No GUIs, no notebooks.
 ---
 
 # force-cli
 
-Tight constraint session. Fifteen minutes max.
+Fifteen minutes max. CLI or Pythonista console only.
 
 ## Rules
 
-- CLI only.
-- Write or run a parser. Do not open a genome browser.
-- If BioPython is missing, that ImportError is the heat-shock. Log it via living-notes.
-- NCBI hint stays a command, not a wrapper app.
-
-## Default cut
-
-Parse a tiny FASTA string. Count N bases as ghost sequence. Log the handshake raw-fasta → gap-count into `interfaces`.
+- Default parser is the raw one in `scripts/run_agent.py`. No Bio import required.
+- If Bio is missing, log it and keep going. That is the heat-shock.
+- NCBI download stays an iSH command. Do not wrap it for Pythonista.
 
 ## Run
 
+Pythonista: set `AGENT = "force-cli"` in `run.py` and tap Run.
+
+iSH:
+
 ```
-pip install biopython   # optional
 python3 scripts/run_agent.py force-cli --query "N-runs"
-```
-
-NCBI (optional, large):
-
-```
-ncbi-genome-download --genera Escherichia --format fasta bacteria
 ```

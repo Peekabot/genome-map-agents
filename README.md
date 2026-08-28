@@ -1,28 +1,40 @@
 # genome-map-agents
 
-Four sub-agents that treat a technical subject like an unmapped genome.
-Smallest cut. Phone is a window. Notes mutate after runtime failure.
+Four sub-agents. Phone is a window. Same phone != same localhost.
+Write to Pythonista `~/Documents`, not Files Provider.
 
-## Agents
+## Pythonista (no iSH hop)
 
-| Agent | Metaphor | Trigger |
-|---|---|---|
-| `sequence-map` | structural genes + TOC | first recon of a topic |
-| `find-gaps` | ghost / dark regions | isolate unknowns, annotate what unmapped code does |
-| `force-cli` | heat-shock | parsers from scratch, no GUI |
-| `living-notes` | epigenetic expression | rewrite notes after errors |
+1. Run `fetch_py.py` as-is.
+2. Open `incoming/genome-map-agents-main/run.py`.
+3. Edit `AGENT` / `TOPIC` at the top. Run.
 
-## Two-minute start (iSH)
+Direct archive:
+`https://github.com/Peekabot/genome-map-agents/archive/refs/heads/main.tar.gz`
+
+## iSH → tarball → Pythonista
 
 ```sh
-git clone https://github.com/Peekabot/genome-map-agents.git
+cd ~
+git clone --depth 1 https://github.com/Peekabot/genome-map-agents.git
 cd genome-map-agents
-python3 scripts/run_agent.py sequence-map --topic "YOUR_TOPIC"
+sh pack_serve.sh .
+# print inet from ifconfig — not 127.0.0.1
 ```
 
-Pythonista: use `pack_serve.sh` then fetch tarball (same pipeline as pythonista-one-cut).
+Pythonista: `fetch_any.py http://ISH_INET:8000/genome-map-agents.tar.gz`
 
-## First piece scripted
+Same-phone HTTP often refuses. Then skip pack_serve and use `fetch_py.py` (GitHub direct).
 
-`sequence-map` — table of contents from learngenomics.dev + Awesome-Bioinformatics patterns.
-Run the other three only after a map exists in `notes/expression.json`.
+## iSH CLI
+
+```sh
+python3 run.py
+python3 scripts/run_agent.py sequence-map --topic "genomics-for-builders"
+python3 scripts/run_agent.py find-gaps --query "VCF FILTER"
+python3 scripts/run_agent.py force-cli --query "N-runs"
+python3 scripts/run_agent.py living-notes --error "paste error"
+```
+
+No pip required. BioPython is optional heat-shock, not a dependency.
+Notes live in `notes/expression.json`.

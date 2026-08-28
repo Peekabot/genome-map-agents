@@ -1,1 +1,3 @@
-biopython
+# optional. Pythonista has no pip for this.
+# iSH: apk add python3 py3-pip && pip install biopython
+# default path uses raw fasta parser in scripts/run_agent.py

@@ -1,18 +1,41 @@
 #!/usr/bin/env python3
-"""Dispatch one sub-agent. Two-minute start."""
-import argparse
+"""Dispatch one sub-agent. Works in iSH and Pythonista. No Bio required."""
 import json
-from datetime import datetime, timezone
-from pathlib import Path
+import os
+import sys
+from datetime import datetime
 
-ROOT = Path(__file__).resolve().parents[1]
-NOTES = ROOT / "notes" / "expression.json"
+try:
+    from datetime import timezone
+    def now():
+        return datetime.now(timezone.utc).isoformat()
+except Exception:
+    def now():
+        return datetime.utcnow().isoformat() + "Z"
+
+
+def _root():
+    start = os.path.dirname(os.path.abspath(__file__)) if "__file__" in dir() else os.getcwd()
+    cur = start
+    for _ in range(6):
+        if os.path.isdir(os.path.join(cur, "notes")):
+            return cur
+        parent = os.path.dirname(cur)
+        if parent == cur:
+            break
+        cur = parent
+    return os.path.dirname(start)
+
+
+ROOT = _root()
+NOTES = os.path.join(ROOT, "notes", "expression.json")
 AGENTS = ("sequence-map", "find-gaps", "force-cli", "living-notes")
 
 
 def load_notes():
-    if NOTES.exists():
-        return json.loads(NOTES.read_text())
+    if os.path.exists(NOTES):
+        with open(NOTES) as f:
+            return json.load(f)
     return {
         "topic": None,
         "structural_genes": [],
@@ -24,15 +47,38 @@ def load_notes():
 
 
 def save_notes(data):
-    data["updated"] = datetime.now(timezone.utc).isoformat()
-    NOTES.parent.mkdir(parents=True, exist_ok=True)
-    NOTES.write_text(json.dumps(data, indent=2) + "\n")
+    data["updated"] = now()
+    d = os.path.dirname(NOTES)
+    if not os.path.isdir(d):
+        os.makedirs(d)
+    with open(NOTES, "w") as f:
+        json.dump(data, f, indent=2)
+        f.write("\n")
+
+
+def parse_fasta(text):
+    recs = []
+    name, buf = None, []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if line.startswith(">"):
+            if name is not None:
+                seq = "".join(buf).upper()
+                recs.append({"id": name, "len": len(seq), "n_count": seq.count("N")})
+            name, buf = line[1:].split()[0], []
+        else:
+            buf.append(line)
+    if name is not None:
+        seq = "".join(buf).upper()
+        recs.append({"id": name, "len": len(seq), "n_count": seq.count("N")})
+    return recs
 
 
 def sequence_map(topic):
     data = load_notes()
     data["topic"] = topic
-    # Structural genes = recon headings, not trivia.
     data["structural_genes"] = [
         {"id": "formats", "name": "sequence formats (FASTA/FASTQ/VCF)", "source": "learngenomics.dev"},
         {"id": "alignment", "name": "alignment vs assembly", "source": "learngenomics.dev"},
@@ -41,7 +87,7 @@ def sequence_map(topic):
         {"id": "ontology", "name": "when a trait is expressed", "source": "GO / goatools"},
         {"id": "tool-index", "name": "field index", "source": "danielecook/Awesome-Bioinformatics"},
     ]
-    if not data["ghost_gaps"]:
+    if not data.get("ghost_gaps"):
         data["ghost_gaps"] = [
             {"id": "unknown-region", "note": "regions with no annotation yet"},
             {"id": "tool-handshake", "note": "how CLI tools pass files between stages"},
@@ -50,17 +96,18 @@ def sequence_map(topic):
     print("sequence-map wrote", NOTES)
     for g in data["structural_genes"]:
         print(" -", g["id"], "|", g["name"])
-    print("next: python3 scripts/run_agent.py find-gaps")
+    print("next AGENT = find-gaps")
 
 
 def find_gaps(query):
     data = load_notes()
     if not data.get("topic"):
-        print("no map yet. run sequence-map first.")
+        print("no map yet. set AGENT = sequence-map first.")
         return
+    q = query or "unmapped"
     gap = {
-        "id": (query or "unmapped").replace(" ", "-")[:40],
-        "query": query,
+        "id": q.replace(" ", "-")[:40],
+        "query": q,
         "annotate_with": ["eggnog-mapper-pattern", "deepvariant-pattern"],
         "status": "isolated",
     }
@@ -69,75 +116,67 @@ def find_gaps(query):
         data["ghost_gaps"].append(gap)
     save_notes(data)
     print("isolated gap:", gap["id"])
-    print("annotation is a note, not a full DeepVariant run.")
-    print("next heat-shock: python3 scripts/run_agent.py force-cli --query", gap["id"])
+    print("next AGENT = force-cli")
 
 
 def force_cli(query):
-    """Heat-shock: tiny BioPython parse, no GUI. Optional NCBI hint only."""
     data = load_notes()
-    recs = []
+    demo = ">ghost\nATGCGTNNTAANNGC\n"
+    recs = parse_fasta(demo)
+    print("raw fasta parse (no Bio)", recs)
     try:
-        from Bio.Seq import Seq
-        from Bio.SeqRecord import SeqRecord
-        from Bio import SeqIO
-        from io import StringIO
-
-        demo = ">ghost\\nATGCGTNNTAANNGC\\n"
-        for rec in SeqIO.parse(StringIO(demo.replace("\\\\n", "\n")), "fasta"):
-            n_count = str(rec.seq).upper().count("N")
-            recs.append({"id": rec.id, "len": len(rec.seq), "n_count": n_count})
-        print("biopython parse ok", recs)
-    except ImportError:
-        print("biopython missing. pip install biopython  OR treat this as the heat-shock.")
-        data["failures"].append({"step": "force-cli", "error": "ImportError: Bio"})
-        save_notes(data)
-        recs = [{"id": "manual", "note": query or "write parser without Bio"}]
-
-    data["interfaces"].append(
-        {
-            "from": "raw-fasta",
-            "to": "gap-count",
-            "query": query,
-            "result": recs,
-        }
+        from Bio.SeqIO import parse as bio_parse  # noqa: F401
+        print("Bio present — unused. heat-shock already passed via raw parser.")
+    except Exception as e:
+        data.setdefault("failures", []).append({"step": "force-cli", "error": type(e).__name__})
+        print("Bio absent (expected on Pythonista). raw parser stands.")
+    data.setdefault("interfaces", []).append(
+        {"from": "raw-fasta", "to": "gap-count", "query": query, "result": recs}
     )
     save_notes(data)
-    print("logged interface handshake to notes/expression.json")
-    print("NCBI pull (do not wrap in GUI):")
+    print("logged handshake", NOTES)
+    print("NCBI stays a command in iSH, not a GUI:")
     print("  ncbi-genome-download --genera Escherichia --format fasta bacteria")
-    print("next: python3 scripts/run_agent.py living-notes --error 'paste build error'")
+    print("next AGENT = living-notes")
 
 
 def living_notes(error):
     data = load_notes()
     if error:
-        data["failures"].append({"error": error, "absorbed": True})
-    # Expression changes after failure: promote last failure into a ghost or interface.
-    if data["failures"]:
+        data.setdefault("failures", []).append({"error": error, "absorbed": True})
+    if data.get("failures"):
         last = data["failures"][-1]
-        gid = "fail-" + str(len(data["failures"]))
-        data["ghost_gaps"].append({"id": gid, "from_failure": last, "status": "expressed"})
+        data.setdefault("ghost_gaps", []).append(
+            {"id": "fail-" + str(len(data["failures"])), "from_failure": last, "status": "expressed"}
+        )
     save_notes(data)
-    print("expression updated. failures now:", len(data["failures"]))
+    print("expression updated. failures:", len(data.get("failures") or []))
     print(NOTES)
 
 
-def main():
-    p = argparse.ArgumentParser(description="genome-map sub-agent dispatcher")
-    p.add_argument("agent", choices=AGENTS)
-    p.add_argument("--topic", default="genomics-for-builders")
-    p.add_argument("--query", default="")
-    p.add_argument("--error", default="")
-    args = p.parse_args()
-    if args.agent == "sequence-map":
-        sequence_map(args.topic)
-    elif args.agent == "find-gaps":
-        find_gaps(args.query or "unmapped-region")
-    elif args.agent == "force-cli":
-        force_cli(args.query)
+def main(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
+    agent = argv[0] if argv else "sequence-map"
+    topic, query, error = "genomics-for-builders", "", ""
+    i = 1
+    while i < len(argv):
+        if argv[i] == "--topic" and i + 1 < len(argv):
+            topic = argv[i + 1]; i += 2; continue
+        if argv[i] == "--query" and i + 1 < len(argv):
+            query = argv[i + 1]; i += 2; continue
+        if argv[i] == "--error" and i + 1 < len(argv):
+            error = argv[i + 1]; i += 2; continue
+        i += 1
+    if agent == "sequence-map":
+        sequence_map(topic)
+    elif agent == "find-gaps":
+        find_gaps(query or "unmapped-region")
+    elif agent == "force-cli":
+        force_cli(query)
+    elif agent == "living-notes":
+        living_notes(error)
     else:
-        living_notes(args.error)
+        print("agents:", ", ".join(AGENTS))
 
 
 if __name__ == "__main__":
