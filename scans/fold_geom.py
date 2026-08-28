@@ -31,6 +31,17 @@ def canon(coords):
     return min(variants)
 
 
+def is_bend(path, k):
+    """True if residue k is a 90-degree lattice hinge."""
+    if k <= 0 or k >= len(path) - 1:
+        return False
+    ax = path[k][0] - path[k - 1][0]
+    ay = path[k][1] - path[k - 1][1]
+    bx = path[k + 1][0] - path[k][0]
+    by = path[k + 1][1] - path[k][1]
+    return ax * bx + ay * by == 0
+
+
 class LatticeFolding:
     def __init__(self, sequence):
         self.sequence = sequence.upper()
@@ -39,6 +50,7 @@ class LatticeFolding:
         self.best_path = []
         self.seen = 0
         self.limit = 0
+        self.bend = None
         self._optima = []
 
     def count_contacts(self, path):
@@ -53,20 +65,25 @@ class LatticeFolding:
                     n += 1
         return n
 
-    def fold(self, limit=0, collect=False):
+    def fold(self, limit=0, collect=False, bend=None):
         self.limit = limit
+        self.bend = bend
         self.seen = 0
         self.best_contacts = -1
         self.best_path = []
         self._optima = []
-        start = (0, 0)
-        self._search([start], {start}, collect)
+        self._search([(0, 0)], {(0, 0)}, collect)
         return self.best_contacts, self.best_path
+
+    def _ok(self, path):
+        return self.bend is None or is_bend(path, self.bend)
 
     def _search(self, path, visited, collect):
         if self.limit and self.seen >= self.limit:
             return
         if len(path) == self.n:
+            if not self._ok(path):
+                return
             self.seen += 1
             c = self.count_contacts(path)
             if collect:
@@ -132,14 +149,26 @@ class LatticeFolding:
 
 
 def main():
-    seq = sys.argv[1] if len(sys.argv) > 1 else "HPPHPH"
+    args = sys.argv[1:]
+    seq = "HPPHPH"
     limit = 0
-    collect = "--unique" in sys.argv
-    if "--limit" in sys.argv:
-        limit = int(sys.argv[sys.argv.index("--limit") + 1])
+    bend = None
+    collect = False
+    i = 0
+    while i < len(args):
+        if args[i] == "--limit" and i + 1 < len(args):
+            limit = int(args[i + 1]); i += 2; continue
+        if args[i] == "--bend" and i + 1 < len(args):
+            bend = int(args[i + 1]); collect = True; i += 2; continue
+        if args[i] == "--unique":
+            collect = True; i += 1; continue
+        if not args[i].startswith("-"):
+            seq = args[i]
+        i += 1
     fold = LatticeFolding(seq)
-    contacts, path = fold.fold(limit=limit, collect=collect)
+    contacts, path = fold.fold(limit=limit, collect=collect, bend=bend)
     print("[*] seq", fold.sequence, "len", fold.n)
+    print("[*] bend", bend if bend is not None else "none")
     print("[*] walks scored", fold.seen, "limit", limit or "none")
     print("[*] best HH contacts", contacts)
     if collect:
@@ -150,8 +179,9 @@ def main():
             path = next(iter(uniq.values()))
     print("[+] fold")
     print(fold.render_ascii(path))
-    print("[+] contact map (* = non-chain HH)")
-    print(fold.contact_map(path))
+    if path:
+        print("[+] contact map (* = non-chain HH)")
+        print(fold.contact_map(path))
 
 
 if __name__ == "__main__":
