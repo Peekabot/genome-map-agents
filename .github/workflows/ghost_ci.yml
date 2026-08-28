@@ -1,0 +1,17 @@
+name: ghost-ci
+on:
+  push:
+    paths:
+      - "**/*.py"
+      - ".github/workflows/ghost_ci.yml"
+  pull_request:
+jobs:
+  fold:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run Structural Fold Analysis
+        run: python scans/alpha_code.py .
